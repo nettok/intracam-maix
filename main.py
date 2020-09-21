@@ -247,23 +247,55 @@ def delete(url, **kw):
     return request("DELETE", url, **kw)
 
 
+
+v = sys.implementation.version
+
+headers ={
+    "User-Agent": "IntraCam/0.1 ({}/{}.{}.{})".format(sys.platform, v[0], v[1], v[2])
+}
+
+base_url = "http://192.168.31.81:8080"
+
+def ping(base_url=base_url, headers=headers):
+    return post(base_url + "/api/ping", headers=headers)
+
+def photo_upload(data, base_url=base_url, headers=headers):
+    return post(base_url + "/api/photos", headers=headers, data=data)
+
+
+def display_lcd(message, background=lcd.BLACK):
+    lcd.clear(background)
+    lcd.draw_string(120, 120, message, lcd.WHITE, background)
+
+
 def main():
     ssid, password = get_wifi_credentials_from_camera_qr_code()
     connect_wifi(ssid, password)
 
-    v = sys.implementation.version
-    headers ={
-        "User-Agent": "IntraCam/0.1 ({}/{}.{}.{})".format(sys.platform, v[0], v[1], v[2])
-    }
+    r = ping()
+    if r.status_code != 200 and r.content != b"pong":
+        display_lcd("ping failed", lcd.RED)
+        return
+    else:
+        display_lcd("connected", lcd.BLUE)
+        time.sleep_ms(1500)
 
-    res = post("http://192.168.31.81:8080/ping", headers=headers)
-    print("response:", res.status_code)
-    content = res.content
-    print(content)
+    sensor.reset(freq=12000000)
+    sensor.set_pixformat(sensor.RGB565)
+    sensor.set_framesize(sensor.QVGA)
+    #sensor.set_vflip(1)
+    #sensor.set_hflip(1)
+    sensor.run(1)
+    sensor.skip_frames(30)
 
-    lcd.clear(lcd.RED)
-    lcd.draw_string(120, 120, content, lcd.WHITE, lcd.RED)
-
+    while True:
+        display_lcd("taking photo...", lcd.BLACK)
+        img = sensor.snapshot()
+        img.compress(quality=100)
+        display_lcd("uploading photo...", lcd.BLACK)
+        photo_upload(img.to_bytes())
+        display_lcd("ready", lcd.BLACK)
+        time.sleep(60)
 
 
 if __name__ == "__main__":
